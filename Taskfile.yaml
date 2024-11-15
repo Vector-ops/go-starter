@@ -1,0 +1,113 @@
+version: "3"
+
+vars:
+    output_dir: "bin"
+    output_file: "go-starter"
+    main_dir: "./cmd/go-starter"
+    test_dir: "./tests"
+    migrations_dir: "./database/migrations"
+    schema_dir: "./database/schema"
+    temp_dir: "tmp"
+
+dotenv: [".env", "{{.HOME}}/.env"]
+
+tasks:
+    # Dev command
+    dev:
+        desc: "Development server with hot reloading"
+        cmds:
+            - air -c .air.toml
+
+    # Task to clean the existing build
+    clean:
+        desc: "Remove existing build"
+        cmds:
+            - "rm -rf {{.output_dir}}"
+            - "rm -rf {{.temp_dir}}"
+
+    # Task to build the Go project
+    build:
+        desc: "Build the Go project"
+        cmds:
+            - "echo 'Building project...'"
+            - "go build -o {{.output_dir}}/{{.output_file}} {{.main_dir}}"
+        preconditions:
+            - sh: test -d {{.output_dir}} || mkdir -p {{.output_dir}}
+
+    # Task to run the Go project after building
+    run:
+        desc: "Run the Go project"
+        deps: [build] # Ensure the project is built before running
+        cmds:
+            - "echo 'Running project...'"
+            - "./{{.output_dir}}/{{.output_file}}"
+
+    # Task to run Go tests
+    test:
+        desc: "Run tests"
+        cmds:
+            - "echo 'Running tests...'"
+            - "go test -v {{.test_dir}}"
+
+    # A combined task that builds, tests, and runs the project
+    all:
+        desc: "Build, test, and run the project"
+        deps: [build, test, run]
+
+    # Docker-related tasks
+    docker-start:
+        desc: "Start Docker services"
+        cmds:
+            - "docker compose up -d"
+
+    docker-stop:
+        desc: "Stop Docker services"
+        cmds:
+            - "docker compose down"
+
+    # Ent tasks
+    ent-schema-*:
+        desc: "Create new ent schema"
+        vars:
+            NAME: "{{index .MATCH 0}}"
+        cmds:
+            - "echo 'Generated new {{.NAME}} schema'"
+            - go run -mod=mod entgo.io/ent/cmd/ent new {{.NAME}}
+
+    ent-generate:
+        desc: "Generate assets from ent schema"
+        cmds:
+            - "go generate ./ent"
+
+    # Migration tasks
+    migrate-up-*:
+        desc: "Run database migrations"
+        vars:
+            COUNT: "{{index .MATCH 0}}"
+        cmds:
+            - "echo 'Running migrations...'"
+            - "migrate -path {{.migrations_dir}} -database $POSTGRES_URL up {{.COUNT}}"
+
+    migrate-down-*:
+        desc: "Rollback database migrations"
+        vars:
+            COUNT: "{{index .MATCH 0}}"
+        cmds:
+            - "echo 'Rolling back migrations...'"
+            - "migrate -path {{.migrations_dir}} -database $POSTGRES_URL down {{.COUNT}}"
+
+    create-migrate-*:
+        desc: "Create a new migration"
+        vars:
+            NAME: "{{index .MATCH 0}}"
+        cmds:
+            - "echo 'Creating new migration...'"
+            - "migrate create -ext sql -dir {{.migrations_dir}} -seq {{.NAME}}"
+
+    migrate-force-*:
+        desc: "Force apply a migration"
+        vars:
+            VERSION: "{{index .MATCH 0}}"
+        cmds:
+            - "echo 'Force applying migration...'"
+            - "migrate -path {{.migrations_dir}} -database $POSTGRES_URL force {{.VERSION}}"
